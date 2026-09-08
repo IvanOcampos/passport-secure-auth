@@ -1,5 +1,5 @@
 const User = require('../models/User');
-const { hashPassword } = require('../services/auth.service');
+const { hashPassword, comparePassword } = require('../services/auth.service');
 
 async function register(req, res){
     try{
@@ -27,4 +27,43 @@ async function register(req, res){
     }
 }
 
-module.exports = { register }
+async function login(req, res){
+    try{
+        const { email, password } = req.body;
+
+        const user = await User.findOne({ email });
+        if (!user){
+            return res.status(401).json({ error: 'Credenciales Inválidas.'});
+        }
+
+        const isValid = await comparePassword(password, user.passwordHash);
+        if(!isValid){
+            return res.status(401).json({ error: 'Credendiales Inválidas.'})
+        }
+
+        // Regenerar el session_id una vez autenticado para evitar un "Session Fixation"
+        req.session.regenerate((err) => {
+            if (err) return res.status(500).json({ error: 'Error de sesión.'});
+
+            req.session.userID = user._id;
+            req.session.role = user.role;
+
+            return res.status(200).json({ message: 'Login exitoso.', user })
+        });
+    } catch(err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Error interno del servidor.' });
+    }
+}
+
+function logout(req, res) {
+    req.session.destroy((err) => {
+        if (err) return res.status(500).json({ error: 'No se pudo cerrar la sesión.' });
+
+        // clearCookie borra la cookie del navegador del cliente explícitamente
+        res.clearCookie('connect.sid');
+        return res.status(200).json({ message: 'Sesión cerrada.' });
+    });
+}
+
+module.exports = { register, login, logout };
