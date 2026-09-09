@@ -1,4 +1,4 @@
-const bcrypt = requiere('bcrypt');
+const bcrypt = require('bcrypt');
 
 // Define el costo computacional del hash, con un estandar de 12 para balancear seguridad vs latencia del servidor, cada +1 DUPLICA el tiempo de cómputo.
 const SALT_ROUNDS = 12;
