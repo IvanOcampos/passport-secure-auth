@@ -2,6 +2,9 @@ const { verifyRefreshToken, signRefreshToken } = require('../../../../../Nueva c
 const User = require('../models/User');
 const { hashPassword, comparePassword } = require('../services/auth.service');
 
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCK_TIME_MS = 15 * 60 * 1000;
+
 async function register(req, res){
     try{
         const { email, password } = req.body;
@@ -37,9 +40,20 @@ async function login(req, res){
             return res.status(401).json({ error: 'Credenciales Inválidas.'});
         }
 
+        if (user.isLocked()) {
+            const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
+            return res.status(423).json({ error: `Cuenta bloqueada temporalmente. Intenta en ${minutesLeft} min.` });
+        }
+
         const isValid = await comparePassword(password, user.passwordHash);
-        if(!isValid){
-            return res.status(401).json({ error: 'Credendiales Inválidas.'})
+        if (!isValid) {
+            user.failedLoginAttempts += 1;
+            if (user.failedLoginAttempts >= MAX_FAILED_ATTEMPTS) {
+                user.lockUntil = new Date(Date.now() + LOCK_TIME_MS);
+                user.failedLoginAttempts = 0;
+            }
+            await user.save();
+            return genericError();
         }
 
         if (authMode === 'jwt'){
@@ -107,4 +121,4 @@ async function refreshAccessToken(req, res){
     return res.status(200).json({ accessToken: newAccessToken });
 }
 
-module.exports = { register, login, logout };
+module.exports = { register, login, logout, refreshAccessToken };
