@@ -1,3 +1,4 @@
+const { verifyRefreshToken, signRefreshToken } = require('../../../../../Nueva carpeta/passport-inc/src/services/token.service');
 const User = require('../models/User');
 const { hashPassword, comparePassword } = require('../services/auth.service');
 
@@ -41,6 +42,24 @@ async function login(req, res){
             return res.status(401).json({ error: 'Credendiales Inválidas.'})
         }
 
+        if (authMode === 'jwt'){
+            const accessToken = signAccessToken(user);
+            const refreshToken = signRefreshToken(user);
+
+            // Guardamos el hash del refresh token
+            user.refreshTokenHash = hashToken(refreshToken);
+            await user.save();
+
+            res.cookie('resfresh_token', resfreshToken, {
+                httpOnly: true,
+                secure: process.env_NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 7 * 24 * 60 * 60 * 1000
+            });
+
+            return res.status(200).json({ message: 'Login exitoso (JWT).', accessToken, user });
+        }
+
         // Regenerar el session_id una vez autenticado para evitar un "Session Fixation"
         req.session.regenerate((err) => {
             if (err) return res.status(500).json({ error: 'Error de sesión.'});
@@ -64,6 +83,28 @@ function logout(req, res) {
         res.clearCookie('connect.sid');
         return res.status(200).json({ message: 'Sesión cerrada.' });
     });
+}
+
+async function refreshAccessToken(req, res){
+    const token = req.cookies['refresh_token'];
+    if (!token) return res.status(401).json({ error: 'Refresh token ausente.' });
+
+    const payload = verifyRefreshToken(token);
+    const user = await User.findById(payload.sub);
+
+    // Comparamos el RefreshToken contra el hash guardado
+    if (!user || user.refreshTokenHash !== hashToken(token)){
+        return res.status(401).json({ error: 'Refresh token inválido' });
+    }
+
+    // Creamos nuevos Tokens (Refresh solo tiene un uso)
+    const newAccessToken = signAccessToken(user);
+    const newRefreshToken = signRefreshToken(user);
+    user.refreshTokenHash = hashToken(newRefreshToken);
+    await user.save();
+
+    res.cookie('refresh_token', newRefreshToken, { httpOnly: true, secure: true, sameSite: 'stict', maxAge: 7*24*60*60*1000});
+    return res.status(200).json({ accessToken: newAccessToken });
 }
 
 module.exports = { register, login, logout };
