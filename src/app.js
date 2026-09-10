@@ -11,7 +11,9 @@ const userRoutes = require('./routes/user.routes');
 const { sanitizeBody } = require('./middlewares/sanitize.middleware')
 
 const app = express();
+app.use(helmet()); // Cabeceras de seguridad: X-Content-Type-Options, X-Frame-Options, HSTS, etc.
 app.use(express.json());
+app.use(cookieParser());
 app.use(sanitizeBody);
 
 // Para que Express reconozca conexiones HTTPS reales y la flag Secure funcione.
